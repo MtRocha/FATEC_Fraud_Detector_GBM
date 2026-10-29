@@ -1,0 +1,16 @@
+# Saídas de compilação
+bin/
+obj/
+
+# Arquivos do Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+
+# Bases de dados (grandes demais para o Git; baixar do Kaggle)
+FraudDetector/DataSet/*.csv
+
+# Modelos treinados gerados pela aplicação
+*.model.json

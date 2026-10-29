@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Gera a documentação OpenAPI e a página do Swagger. Só documentação: não participa do modelo. -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Leva o modelo treinado junto com a API ao compilar e ao publicar (pasta Models ao lado do executável). -->
+    <Content Include="..\Models\fraud.model.json" Link="Models\fraud.model.json"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+             Condition="Exists('..\Models\fraud.model.json')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FraudDetector.Core\FraudDetector.Core.csproj" />
+  </ItemGroup>
+
+</Project>

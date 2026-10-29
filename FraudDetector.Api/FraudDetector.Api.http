@@ -1,0 +1,89 @@
+@host = http://localhost:5080
+
+### 1) A API está no ar? Qual modelo foi carregado?
+GET {{host}}/health
+
+### 2) Transação normal (primeira linha do fraudTest.csv): cuidados pessoais, US$ 2,86, meio-dia
+POST {{host}}/predict
+Content-Type: application/json
+
+{
+  "transactionTime": "2020-06-21T12:14:25",
+  "category": "personal_care",
+  "amount": 2.86,
+  "currency": "USD",
+  "gender": "M",
+  "customerLat": 33.9659,
+  "customerLong": -80.9355,
+  "dateOfBirth": "1968-03-19",
+  "merchantLat": 33.986391,
+  "merchantLong": -81.200714
+}
+
+### 3) Fraude real do fraudTest.csv: compra online de US$ 780,52 às 22h32
+POST {{host}}/predict
+Content-Type: application/json
+
+{
+  "transactionTime": "2020-06-21T22:32:22",
+  "category": "misc_net",
+  "amount": 780.52,
+  "currency": "USD",
+  "gender": "M",
+  "customerLat": 42.5545,
+  "customerLong": -90.3508,
+  "dateOfBirth": "1958-09-10",
+  "merchantLat": 42.461127000000005,
+  "merchantLong": -91.147148
+}
+
+### 4) Brasil, compra comum: R$ 250,50 em entretenimento, 11h15, São Paulo
+POST {{host}}/predict
+Content-Type: application/json
+
+{
+  "transactionTime": "2026-10-03T11:15:00",
+  "category": "entertainment",
+  "amount": 250.50,
+  "currency": "BRL",
+  "gender": "M",
+  "customerLat": -23.550520,
+  "customerLong": -46.633308,
+  "dateOfBirth": "1992-08-14",
+  "merchantLat": -23.551200,
+  "merchantLong": -46.634100
+}
+
+### 5) Brasil, compra suspeita: R$ 5.000 em compra online à 0h14
+POST {{host}}/predict
+Content-Type: application/json
+
+{
+  "transactionTime": "2026-10-03T00:14:22",
+  "category": "shopping_net",
+  "amount": 5000.00,
+  "currency": "BRL",
+  "gender": "F",
+  "customerLat": -23.550520,
+  "customerLong": -46.633308,
+  "dateOfBirth": "1992-08-14",
+  "merchantLat": -22.906847,
+  "merchantLong": -43.172897
+}
+
+### 6) Entradas inválidas: hora com Z, titular de 8 anos, moeda inexistente. Deve responder 400.
+POST {{host}}/predict
+Content-Type: application/json
+
+{
+  "transactionTime": "2026-10-03T03:14:22.000Z",
+  "category": "entertainment",
+  "amount": 18500.00,
+  "currency": "ABC",
+  "gender": "F",
+  "customerLat": -23.550520,
+  "customerLong": -46.633308,
+  "dateOfBirth": "2018-05-12",
+  "merchantLat": 35.676200,
+  "merchantLong": 139.650300
+}

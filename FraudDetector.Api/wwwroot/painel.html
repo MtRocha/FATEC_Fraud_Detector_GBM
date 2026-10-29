@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel de transações</title>
+<style>
+  :root {
+    --bg: #eef2f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6577; --line: #d9e0ec;
+    --primary: #1d4ed8; --ok: #15803d; --ok-bg: #dcfce7; --bad: #b91c1c; --bad-bg: #fee2e2; --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 28px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 1.5rem; }
+  header p { margin: 0; color: var(--muted); font-size: .95rem; }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .9rem; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; }
+  .dot.live { background: var(--ok); } .dot.down { background: var(--bad); }
+  .clear { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 8px 12px; font: inherit; font-size: .9rem; cursor: pointer; color: var(--ink); }
+
+  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 20px; padding: 0 28px 28px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 0 16px 20px; } header { padding: 16px; } }
+  .card { background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: 0 1px 3px rgba(15, 23, 42, .07); }
+  .side { display: grid; gap: 20px; }
+  .card h2 { margin: 0 0 10px; font-size: 1rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+
+  .qr { text-align: center; }
+  .qr svg, .qr img { width: 100%; max-width: 220px; height: auto; }
+  .qr a { display: block; margin-top: 8px; font-weight: 700; color: var(--primary); word-break: break-all; text-decoration: none; }
+
+  .counters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+  .counters b { display: block; font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .counters span { font-size: .8rem; color: var(--muted); }
+  .counters .ok b { color: var(--ok); } .counters .bad b { color: var(--bad); }
+
+  /* Transação em destaque */
+  .spot { min-height: 330px; }
+  .empty { color: var(--muted); text-align: center; padding: 90px 20px; font-size: 1.1rem; }
+  .spot-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .spot-amount { font-size: 2.8rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .spot-sub { color: var(--muted); }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; }
+  @media (max-width: 700px) { .facts { grid-template-columns: repeat(2, 1fr); } .spot-amount { font-size: 2.1rem; } }
+  .fact { background: #f4f6fb; border-radius: 12px; padding: 10px 12px; }
+  .fact span { display: block; font-size: .78rem; color: var(--muted); }
+  .fact b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+
+  .pipeline { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .pipeline span { padding: 6px 12px; border-radius: 999px; background: #e5eaf3; color: var(--muted); font-size: .9rem; transition: background .25s, color .25s; }
+  .pipeline span.on { background: var(--primary); color: #fff; }
+  .pipeline span.done { background: #dbe7ff; color: var(--primary); }
+
+  .result { display: flex; align-items: center; gap: 16px; opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
+  .result.show { opacity: 1; transform: none; }
+  .stamp { flex: none; padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 1.35rem; letter-spacing: .03em; }
+  .ok .stamp { background: var(--ok-bg); color: var(--ok); } .bad .stamp { background: var(--bad-bg); color: var(--bad); }
+  .gauge { flex: 1; min-width: 0; }
+  .gauge .label { display: flex; justify-content: space-between; font-size: .9rem; color: var(--muted); }
+  .gauge .label b { color: var(--ink); font-size: 1.1rem; }
+  .meter { height: 16px; border-radius: 999px; background: #e5eaf3; position: relative; margin-top: 6px; }
+  .meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; min-width: 5px; width: 0; transition: width .6s ease-out; }
+  .ok .meter i { background: var(--ok); } .bad .meter i { background: var(--bad); }
+  .meter em { position: absolute; top: -5px; bottom: -5px; width: 3px; background: var(--ink); border-radius: 2px; }
+  @media (prefers-reduced-motion: reduce) { .meter i, .result, .pipeline span { transition: none; } }
+
+  /* Histórico */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 10px; border-bottom: 1px solid #edf1f7; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.num, th.num { text-align: right; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: .82rem; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.bad { background: var(--bad-bg); color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Detector de fraude — painel ao vivo</h1>
+    <p>Cada compra enviada passa pelo modelo de gradient boosting e aparece aqui.</p>
+  </div>
+  <div class="status">
+    <span class="dot" id="dot"></span><span id="statusText">conectando…</span>
+    <button class="clear" id="clear" type="button">Limpar</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <section class="card qr">
+      <h2>Faça uma compra</h2>
+      <div id="qr"></div>
+      <a id="payLink" href="pagar.html"></a>
+    </section>
+    <section class="card">
+      <h2>Placar</h2>
+      <div class="counters">
+        <div><b id="total">0</b><span>recebidas</span></div>
+        <div class="ok"><b id="approved">0</b><span>aprovadas</span></div>
+        <div class="bad"><b id="blocked">0</b><span>bloqueadas</span></div>
+      </div>
+    </section>
+  </aside>
+
+  <main class="side">
+    <section class="card spot" id="spot" aria-live="polite">
+      <div class="empty" id="empty">Aguardando a primeira compra…<br>Aponte a câmera para o QR code ao lado.</div>
+    </section>
+    <section class="card">
+      <h2>Histórico</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>#</th><th>Recebida</th><th>Comércio</th><th class="num">Valor</th>
+            <th class="num">Hora</th><th class="num">Distância</th><th class="num">Prob. de fraude</th><th>Decisão</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Gerador de QR code (biblioteca qrcode-generator, licença MIT), servido pela própria API. -->
+<script src="qrcode.js"></script>
+<script>
+  const CATEGORIES = {
+    grocery_pos: "Supermercado (loja)", grocery_net: "Supermercado (online)",
+    shopping_pos: "Compras (loja)", shopping_net: "Compras (online)",
+    food_dining: "Restaurante", gas_transport: "Combustível e transporte",
+    entertainment: "Entretenimento", health_fitness: "Saúde e academia",
+    personal_care: "Cuidados pessoais", home: "Casa", kids_pets: "Crianças e pets",
+    travel: "Viagem", misc_pos: "Outros (loja)", misc_net: "Outros (online)"
+  };
+  const SYMBOL = { BRL: "R$", USD: "US$", EUR: "€" };
+  const $ = id => document.getElementById(id);
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function money(value, currency) {
+    return `${SYMBOL[currency] || currency} ${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  function percent(p) {
+    const value = p * 100;
+    if (value > 0 && value < 0.01) return "< 0,01%";
+    return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
+  }
+  function km(value) {
+    return Number(value).toLocaleString("pt-BR", { maximumFractionDigits: value < 10 ? 1 : 0 }) + " km";
+  }
+
+  // ---------- Link e QR code da página de pagamento ----------
+  const payUrl = new URL("pagar.html", location.href).href;
+  $("payLink").href = payUrl;
+  $("payLink").textContent = payUrl.replace(/^https?:\/\//, "");
+  try {
+    const code = qrcode(0, "M"); code.addData(payUrl); code.make();
+    $("qr").innerHTML = code.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+  } catch { /* se o QR falhar, o link acima continua valendo */ }
+
+  // ---------- Transação em destaque: mostra o caminho dentro da API, depois o veredito ----------
+  const STAGES = ["Recebida", "Features calculadas", "Árvores somadas", "Decisão"];
+  let spotToken = 0;
+
+  async function spotlight(entry, animate) {
+    const token = ++spotToken;                    // se chegar outra compra no meio, esta animação é abandonada
+    const spot = $("spot");
+    const blocked = entry.isFraud;
+
+    const head = el("div", "spot-head");
+    const left = el("div");
+    left.append(el("div", "spot-amount", money(entry.amount, entry.currency)),
+                el("div", "spot-sub", `Compra nº ${entry.id} · ${CATEGORIES[entry.category] || entry.category}`));
+    head.append(left);
+    if (entry.currency !== "USD") head.append(el("div", "spot-sub", `o modelo viu ${money(entry.amountInModelCurrency, "USD")}`));
+
+    const facts = el("div", "facts");
+    for (const [label, value] of [
+      ["Hora da compra", String(entry.hour).padStart(2, "0") + "h"],
+      ["Distância até o comércio", km(entry.distanceKm)],
+      ["Idade do titular", entry.age + " anos"],
+      ["Gênero", entry.gender === "M" ? "Masculino" : "Feminino"]
+    ]) { const fact = el("div", "fact"); fact.append(el("span", "", label), el("b", "", value)); facts.append(fact); }
+
+    const pipeline = el("div", "pipeline");
+    const stages = STAGES.map(name => { const s = el("span", "", name); pipeline.append(s); return s; });
+
+    const result = el("div", "result " + (blocked ? "bad" : "ok"));
+    const gauge = el("div", "gauge");
+    const label = el("div", "label");
+    label.append(el("span", "", "Probabilidade de fraude"), el("b", "", percent(entry.fraudProbability)));
+    const meter = el("div", "meter");
+    const fill = el("i"); const cut = el("em");
+    cut.style.left = entry.threshold * 100 + "%";
+    cut.title = `corte em ${Math.round(entry.threshold * 100)}%`;
+    meter.append(fill, cut);
+    gauge.append(label, meter);
+    result.append(el("div", "stamp", blocked ? "BLOQUEADA" : "APROVADA"), gauge);
+
+    spot.replaceChildren(head, facts, pipeline, result);
+
+    for (let i = 0; i < stages.length; i++) {
+      stages[i].className = "on";
+      if (animate) await wait(450);
+      if (token !== spotToken) return;
+      stages[i].className = "done";
+    }
+    result.classList.add("show");
+    requestAnimationFrame(() => fill.style.width = Math.max(0, Math.min(100, entry.fraudProbability * 100)) + "%");
+  }
+
+  function addRow(entry) {
+    const row = el("tr");
+    const received = new Date(entry.receivedAtUtc);
+    row.append(
+      el("td", "", String(entry.id)),
+      el("td", "", received.toLocaleTimeString("pt-BR")),
+      el("td", "", CATEGORIES[entry.category] || entry.category),
+      el("td", "num", money(entry.amount, entry.currency)),
+      el("td", "num", String(entry.hour).padStart(2, "0") + "h"),
+      el("td", "num", km(entry.distanceKm)),
+      el("td", "num", percent(entry.fraudProbability)));
+    const decision = el("td");
+    decision.append(el("span", "pill " + (entry.isFraud ? "bad" : "ok"), entry.isFraud ? "Bloqueada" : "Aprovada"));
+    row.append(decision);
+    $("rows").prepend(row);
+    while ($("rows").children.length > 30) $("rows").lastChild.remove();
+  }
+
+  // ---------- Consulta a API a cada segundo pedindo só o que chegou depois da última compra vista ----------
+  let lastId = 0;
+  let firstLoad = true;
+
+  async function poll() {
+    try {
+      const response = await fetch(`feed?after=${lastId}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(response.status);
+      const data = await response.json();
+
+      $("dot").className = "dot live"; $("statusText").textContent = "ao vivo";
+      $("total").textContent = data.total;
+      $("blocked").textContent = data.blocked;
+      $("approved").textContent = data.total - data.blocked;
+
+      if (data.lastId < lastId) {           // o painel foi limpo (ou a API reiniciou)
+        lastId = 0; $("rows").replaceChildren(); spotToken++;
+        $("spot").replaceChildren(el("div", "empty", "Aguardando a primeira compra…"));
+      }
+      for (const entry of data.entries) { addRow(entry); lastId = Math.max(lastId, entry.id); }
+      if (data.entries.length > 0) spotlight(data.entries[data.entries.length - 1], !firstLoad);
+      firstLoad = false;
+    } catch {
+      $("dot").className = "dot down"; $("statusText").textContent = "sem conexão com a API";
+    }
+    setTimeout(poll, 1000);
+  }
+  poll();
+
+  $("clear").addEventListener("click", async () => {
+    if (!confirm("Apagar todas as compras do painel?")) return;
+    await fetch("feed", { method: "DELETE" }).catch(() => {});
+  });
+</script>
+</body>
+</html>

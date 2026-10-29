@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagar por aproximação</title>
+<style>
+  :root {
+    --bg: #eef2f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6577; --line: #d9e0ec;
+    --primary: #1d4ed8; --primary-ink: #ffffff; --ok: #15803d; --ok-bg: #dcfce7;
+    --bad: #b91c1c; --bad-bg: #fee2e2; --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 1.35rem; margin: 4px 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: .95rem; }
+
+  /* Cartão ilustrativo */
+  .plastic {
+    border-radius: var(--radius); padding: 18px 20px; color: #fff; margin-bottom: 16px;
+    background: linear-gradient(135deg, #1e3a8a, #2563eb 55%, #38bdf8);
+    box-shadow: 0 10px 24px rgba(30, 58, 138, .28);
+  }
+  .plastic .row { display: flex; justify-content: space-between; align-items: center; }
+  .plastic .brand { font-weight: 700; letter-spacing: .04em; }
+  .plastic .amount { font-size: 2rem; font-weight: 700; margin: 18px 0 2px; font-variant-numeric: tabular-nums; }
+  .plastic .hint { opacity: .85; font-size: .85rem; }
+  .waves { width: 28px; height: 28px; }
+
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .presets button {
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    border-radius: 999px; padding: 8px 14px; font: inherit; font-size: .9rem; cursor: pointer;
+  }
+  .presets button:active { background: #e2e8f5; }
+
+  fieldset {
+    border: 0; background: var(--card); border-radius: var(--radius);
+    padding: 16px; margin: 0 0 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+  }
+  legend { float: left; width: 100%; font-weight: 700; margin-bottom: 10px; padding: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; clear: both; }
+  .full { grid-column: 1 / -1; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 4px; }
+  input, select {
+    width: 100%; font: inherit; color: var(--ink); background: #fff;
+    border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; min-height: 46px;
+  }
+  input:focus, select:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  .coords { display: none; }
+  .coords.show { display: grid; }
+
+  .pay {
+    width: 100%; border: 0; border-radius: var(--radius); padding: 16px; cursor: pointer;
+    background: var(--primary); color: var(--primary-ink); font: inherit; font-weight: 700; font-size: 1.1rem;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .pay:disabled { opacity: .6; }
+  .errors {
+    display: none; background: var(--bad-bg); color: var(--bad); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 14px; font-size: .95rem;
+  }
+  .errors.show { display: block; }
+  .errors ul { margin: 6px 0 0; padding-left: 18px; }
+
+  /* Tela de aproximação e resultado */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, .72); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .sheet {
+    background: var(--card); border-radius: 22px; padding: 26px 22px; width: 100%; max-width: 420px;
+    text-align: center; max-height: 100%; overflow: auto;
+  }
+  .nfc { position: relative; width: 150px; height: 150px; margin: 4px auto 18px; }
+  .nfc .core {
+    position: absolute; inset: 45px; border-radius: 50%; background: var(--primary);
+    display: grid; place-items: center; color: #fff;
+  }
+  .nfc .ring {
+    position: absolute; inset: 45px; border-radius: 50%; border: 3px solid var(--primary);
+    animation: pulse 1.6s ease-out infinite; opacity: 0;
+  }
+  .nfc .ring:nth-child(2) { animation-delay: .5s; }
+  .nfc .ring:nth-child(3) { animation-delay: 1s; }
+  @keyframes pulse { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .nfc .ring { animation: none; opacity: .3; } }
+
+  .steps { list-style: none; padding: 0; margin: 0 auto; text-align: left; max-width: 300px; }
+  .steps li { padding: 6px 0; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .steps li::before {
+    content: ""; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); flex: none;
+  }
+  .steps li.doing { color: var(--ink); font-weight: 600; }
+  .steps li.doing::before { border-color: var(--primary); border-top-color: transparent; animation: spin .7s linear infinite; }
+  .steps li.done { color: var(--ink); }
+  .steps li.done::before { background: var(--ok); border-color: var(--ok); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .verdict { display: none; }
+  .verdict.show { display: block; }
+  .badge {
+    width: 84px; height: 84px; border-radius: 50%; margin: 0 auto 12px; display: grid; place-items: center;
+    font-size: 2.6rem; font-weight: 700;
+  }
+  .ok .badge { background: var(--ok-bg); color: var(--ok); }
+  .bad .badge { background: var(--bad-bg); color: var(--bad); }
+  .verdict h2 { margin: 0 0 4px; font-size: 1.5rem; }
+  .ok h2 { color: var(--ok); } .bad h2 { color: var(--bad); }
+  .verdict p { margin: 0 0 14px; color: var(--muted); }
+  .meter { height: 12px; border-radius: 999px; background: #e5eaf3; position: relative; margin: 6px 0 4px; }
+  .meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; min-width: 4px; }
+  .ok .meter i { background: var(--ok); } .bad .meter i { background: var(--bad); }
+  .meter b { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--ink); }
+  .scale { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); }
+  dl { display: grid; grid-template-columns: auto auto; gap: 6px 12px; text-align: left; margin: 16px 0; font-size: .92rem; }
+  dt { color: var(--muted); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .again { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 12px; padding: 12px 18px; font: inherit; font-weight: 600; cursor: pointer; width: 100%; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pagar por aproximação</h1>
+  <p class="sub">Monte a compra como quiser e aproxime. O modelo decide se ela passa.</p>
+
+  <div class="plastic" aria-hidden="true">
+    <div class="row">
+      <span class="brand">FRAUD DETECTOR</span>
+      <svg class="waves" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M6 8a6 6 0 0 1 0 8M10 5a10 10 0 0 1 0 14M14 2a14 14 0 0 1 0 20"/>
+      </svg>
+    </div>
+    <div class="amount" id="cardAmount">R$ 0,00</div>
+    <div class="hint" id="cardHint"></div>
+  </div>
+
+  <div class="presets" aria-label="Exemplos prontos">
+    <button type="button" data-preset="comum">Compra comum</button>
+    <button type="button" data-preset="madrugada">Madrugada, valor alto</button>
+    <button type="button" data-preset="online">Online à noite</button>
+  </div>
+
+  <div class="errors" id="errors" role="alert"></div>
+
+  <form id="form" novalidate>
+    <fieldset>
+      <legend>A compra</legend>
+      <div class="grid">
+        <div>
+          <label for="amount">Valor</label>
+          <input id="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="89.90" required>
+        </div>
+        <div>
+          <label for="currency">Moeda</label>
+          <select id="currency">
+            <option value="BRL">Real (BRL)</option>
+            <option value="USD">Dólar (USD)</option>
+            <option value="EUR">Euro (EUR)</option>
+          </select>
+        </div>
+        <div class="full">
+          <label for="category">Tipo de comércio</label>
+          <select id="category"></select>
+        </div>
+        <div class="full">
+          <label for="when">Data e hora da compra (hora local)</label>
+          <input id="when" type="datetime-local" required>
+        </div>
+        <div class="full">
+          <label for="merchantCity">Onde fica o comércio</label>
+          <select id="merchantCity"></select>
+        </div>
+        <div class="grid full coords" id="merchantCoords">
+          <div><label for="merchantLat">Latitude</label><input id="merchantLat" type="number" step="any" value="-23.5505"></div>
+          <div><label for="merchantLong">Longitude</label><input id="merchantLong" type="number" step="any" value="-46.6333"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>O titular do cartão</legend>
+      <div class="grid">
+        <div>
+          <label for="dob">Nascimento</label>
+          <input id="dob" type="date" value="1992-08-14" required>
+        </div>
+        <div>
+          <label for="gender">Gênero</label>
+          <select id="gender"><option value="F">Feminino</option><option value="M">Masculino</option></select>
+        </div>
+        <div class="full">
+          <label for="customerCity">Onde o titular mora</label>
+          <select id="customerCity"></select>
+        </div>
+        <div class="grid full coords" id="customerCoords">
+          <div><label for="customerLat">Latitude</label><input id="customerLat" type="number" step="any" value="-23.5505"></div>
+          <div><label for="customerLong">Longitude</label><input id="customerLong" type="number" step="any" value="-46.6333"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <button class="pay" id="pay" type="submit">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <path d="M6 8a6 6 0 0 1 0 8M10 5a10 10 0 0 1 0 14M14 2a14 14 0 0 1 0 20"/>
+      </svg>
+      Aproximar para pagar
+    </button>
+  </form>
+</main>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-live="polite">
+  <div class="sheet">
+    <div id="working">
+      <div class="nfc" aria-hidden="true">
+        <span class="ring"></span><span class="ring"></span><span class="ring"></span>
+        <span class="core">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M6 8a6 6 0 0 1 0 8M10 5a10 10 0 0 1 0 14M14 2a14 14 0 0 1 0 20"/>
+          </svg>
+        </span>
+      </div>
+      <ul class="steps" id="steps">
+        <li>Lendo o cartão</li>
+        <li>Enviando para a API</li>
+        <li>Calculando as features</li>
+        <li id="stepTrees">Somando as árvores do modelo</li>
+      </ul>
+    </div>
+
+    <div class="verdict" id="verdict">
+      <div class="badge" id="badge"></div>
+      <h2 id="verdictTitle"></h2>
+      <p id="verdictText"></p>
+      <div class="meter"><i id="meterFill"></i><b id="meterCut"></b></div>
+      <div class="scale"><span>0%</span><span id="cutLabel"></span><span>100%</span></div>
+      <dl id="details"></dl>
+      <button class="again" id="again" type="button">Nova compra</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Categorias que o modelo conhece (valor enviado à API → rótulo em português).
+  const CATEGORIES = {
+    grocery_pos: "Supermercado (loja)", grocery_net: "Supermercado (online)",
+    shopping_pos: "Compras (loja)", shopping_net: "Compras (online)",
+    food_dining: "Restaurante", gas_transport: "Combustível e transporte",
+    entertainment: "Entretenimento", health_fitness: "Saúde e academia",
+    personal_care: "Cuidados pessoais", home: "Casa", kids_pets: "Crianças e pets",
+    travel: "Viagem", misc_pos: "Outros (loja)", misc_net: "Outros (online)"
+  };
+  const CITIES = {
+    "São Paulo": [-23.5505, -46.6333], "Rio de Janeiro": [-22.9068, -43.1729],
+    "Belo Horizonte": [-19.9167, -43.9345], "Brasília": [-15.7939, -47.8828],
+    "Salvador": [-12.9777, -38.5016], "Fortaleza": [-3.7319, -38.5267],
+    "Recife": [-8.0476, -34.877], "Curitiba": [-25.4284, -49.2733],
+    "Porto Alegre": [-30.0346, -51.2177], "Manaus": [-3.119, -60.0217],
+    "Belém": [-1.4558, -48.4902], "Goiânia": [-16.6869, -49.2648]
+  };
+  const ABROAD = {
+    "Buenos Aires": [-34.6037, -58.3816], "Lisboa": [38.7223, -9.1393],
+    "Nova York": [40.7128, -74.006], "Tóquio": [35.6762, 139.6503]
+  };
+  const SYMBOL = { BRL: "R$", USD: "US$", EUR: "€" };
+  const $ = id => document.getElementById(id);
+
+  // ---------- Preenche as listas ----------
+  for (const [value, label] of Object.entries(CATEGORIES)) $("category").add(new Option(label, value));
+  for (const name of Object.keys(CITIES)) $("customerCity").add(new Option(name, name));
+  $("customerCity").add(new Option("Outro lugar (informar coordenadas)", "custom"));
+  $("merchantCity").add(new Option("Na mesma cidade do titular", "same"));
+  for (const name of [...Object.keys(CITIES), ...Object.keys(ABROAD)]) $("merchantCity").add(new Option(name, name));
+  $("merchantCity").add(new Option("Outro lugar (informar coordenadas)", "custom"));
+
+  // Hora local no formato que a API espera: sem "Z" e sem fuso.
+  function localDateTime(date) {
+    const p = n => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
+  }
+  $("when").value = localDateTime(new Date());
+  $("category").value = "food_dining";
+
+  // ---------- Exemplos prontos (só preenchem o formulário; tudo continua editável) ----------
+  function atHour(hour, minute) {
+    const d = new Date(); d.setHours(hour, minute, 0, 0); return localDateTime(d);
+  }
+  const PRESETS = {
+    comum:     { amount: "89.90",   currency: "BRL", category: "food_dining",  when: () => atHour(12, 40), merchantCity: "same" },
+    madrugada: { amount: "5200.00", currency: "BRL", category: "shopping_pos", when: () => atHour(2, 15),  merchantCity: "same" },
+    online:    { amount: "4800.00", currency: "BRL", category: "shopping_net", when: () => atHour(23, 10), merchantCity: "Rio de Janeiro" }
+  };
+  document.querySelectorAll("[data-preset]").forEach(button => button.addEventListener("click", () => {
+    const preset = PRESETS[button.dataset.preset];
+    $("amount").value = preset.amount; $("currency").value = preset.currency;
+    $("category").value = preset.category; $("when").value = preset.when();
+    $("merchantCity").value = preset.merchantCity;
+    refresh();
+  }));
+
+  // ---------- Atualiza o cartão ilustrativo e os campos de coordenadas ----------
+  function money(value, currency) {
+    return `${SYMBOL[currency] || currency} ${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  function refresh() {
+    $("cardAmount").textContent = money($("amount").value, $("currency").value);
+    $("cardHint").textContent = CATEGORIES[$("category").value];
+    $("customerCoords").classList.toggle("show", $("customerCity").value === "custom");
+    $("merchantCoords").classList.toggle("show", $("merchantCity").value === "custom");
+  }
+  $("form").addEventListener("input", refresh);
+  refresh();
+
+  function customerLocation() {
+    if ($("customerCity").value === "custom") return [Number($("customerLat").value), Number($("customerLong").value)];
+    return CITIES[$("customerCity").value];
+  }
+  function merchantLocation() {
+    const choice = $("merchantCity").value;
+    if (choice === "custom") return [Number($("merchantLat").value), Number($("merchantLong").value)];
+    if (choice === "same") { const [lat, lon] = customerLocation(); return [lat + 0.02, lon + 0.02]; } // ~3 km
+    return CITIES[choice] || ABROAD[choice];
+  }
+
+  // ---------- Envio ----------
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  function showErrors(messages) {
+    const box = $("errors");
+    box.replaceChildren();
+    const title = document.createElement("strong");
+    title.textContent = "A API recusou a compra antes de consultar o modelo:";
+    const list = document.createElement("ul");
+    for (const message of messages) { const li = document.createElement("li"); li.textContent = message; list.append(li); }
+    box.append(title, list);
+    box.classList.add("show");
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function animateSteps(untilDone) {
+    const items = [...$("steps").children];
+    items.forEach(li => li.className = "");
+    for (let i = 0; i < items.length; i++) {
+      items[i].className = "doing";
+      // O último passo fica girando até a resposta da API chegar de verdade.
+      if (i === items.length - 1) await untilDone; else await wait(550);
+      items[i].className = "done";
+    }
+    await wait(350);
+  }
+
+  function percent(p) {
+    const value = p * 100;
+    if (value > 0 && value < 0.01) return "menos de 0,01%";
+    return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
+  }
+
+  function showVerdict(result, payload) {
+    const blocked = result.isFraud;
+    const verdict = $("verdict");
+    verdict.className = "verdict show " + (blocked ? "bad" : "ok");
+    $("badge").textContent = blocked ? "✕" : "✓";
+    $("verdictTitle").textContent = blocked ? "Compra bloqueada" : "Compra aprovada";
+    $("verdictText").textContent = `Probabilidade de fraude: ${percent(result.fraudProbability)}`;
+    $("meterFill").style.width = Math.max(0, Math.min(100, result.fraudProbability * 100)) + "%";
+    $("meterCut").style.left = result.threshold * 100 + "%";
+    $("cutLabel").textContent = `corte em ${Math.round(result.threshold * 100)}%`;
+
+    const rows = [["Valor enviado", money(payload.amount, payload.currency)]];
+    if (payload.currency !== result.modelCurrency)
+      rows.push([`Valor que o modelo viu`, money(result.amountInModelCurrency, result.modelCurrency)],
+                ["Cotação usada", `${result.exchangeRate} (${result.exchangeRateSource})`]);
+    rows.push(["Hora da compra", payload.transactionTime.slice(11, 16)]);
+
+    const details = $("details");
+    details.replaceChildren();
+    for (const [term, value] of rows) {
+      const dt = document.createElement("dt"); dt.textContent = term;
+      const dd = document.createElement("dd"); dd.textContent = value;
+      details.append(dt, dd);
+    }
+    $("working").style.display = "none";
+  }
+
+  $("form").addEventListener("submit", async event => {
+    event.preventDefault();
+    $("errors").classList.remove("show");
+
+    const [customerLat, customerLong] = customerLocation();
+    const [merchantLat, merchantLong] = merchantLocation();
+    const when = $("when").value;
+    const payload = {
+      transactionTime: when.length === 16 ? when + ":00" : when,
+      category: $("category").value,
+      amount: Number($("amount").value),
+      currency: $("currency").value,
+      gender: $("gender").value,
+      customerLat, customerLong,
+      dateOfBirth: $("dob").value,
+      merchantLat, merchantLong
+    };
+
+    $("pay").disabled = true;
+    $("working").style.display = "";
+    $("verdict").className = "verdict";
+    $("overlay").classList.add("show");
+
+    // A chamada e a animação correm juntas; o resultado só aparece quando as duas terminam.
+    const request = fetch("predict", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    }).then(async response => ({ ok: response.ok, body: await response.json().catch(() => null) }))
+      .catch(() => ({ ok: false, body: null }));
+
+    await animateSteps(request);
+    const { ok, body } = await request;
+    $("pay").disabled = false;
+
+    if (ok && body) { showVerdict(body, payload); return; }
+
+    $("overlay").classList.remove("show");
+    const messages = body && body.errors
+      ? Object.values(body.errors).flat()
+      : ["Não foi possível falar com a API. Verifique a conexão e tente de novo."];
+    showErrors(messages);
+  });
+
+  $("again").addEventListener("click", () => $("overlay").classList.remove("show"));
+
+  // Mostra o número real de árvores do modelo carregado na API.
+  fetch("health").then(r => r.json()).then(h => {
+    if (h && h.trees) $("stepTrees").textContent = `Somando as ${h.trees} árvores do modelo`;
+  }).catch(() => {});
+</script>
+</body>
+</html>
