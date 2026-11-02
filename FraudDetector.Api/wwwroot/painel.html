@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #eef2f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6577; --line: #d9e0ec;
-    --primary: #1d4ed8; --ok: #15803d; --ok-bg: #dcfce7; --bad: #b91c1c; --bad-bg: #fee2e2; --radius: 18px;
+    --primary: #1d4ed8; --ok: #15803d; --ok-bg: #dcfce7; --bad: #b91c1c; --bad-bg: #fee2e2; --warn: #b45309; --warn-bg: #fef3c7; --radius: 18px;
   }
   * { box-sizing: border-box; }
   body {
@@ -32,10 +32,10 @@
   .qr svg, .qr img { width: 100%; max-width: 220px; height: auto; }
   .qr a { display: block; margin-top: 8px; font-weight: 700; color: var(--primary); word-break: break-all; text-decoration: none; }
 
-  .counters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+  .counters { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 10px; text-align: center; }
   .counters b { display: block; font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .counters span { font-size: .8rem; color: var(--muted); }
-  .counters .ok b { color: var(--ok); } .counters .bad b { color: var(--bad); }
+  .counters .ok b { color: var(--ok); } .counters .bad b { color: var(--bad); } .counters .warn b { color: var(--warn); }
 
   /* Transação em destaque */
   .spot { min-height: 330px; }
@@ -57,13 +57,16 @@
   .result { display: flex; align-items: center; gap: 16px; opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
   .result.show { opacity: 1; transform: none; }
   .stamp { flex: none; padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 1.35rem; letter-spacing: .03em; }
-  .ok .stamp { background: var(--ok-bg); color: var(--ok); } .bad .stamp { background: var(--bad-bg); color: var(--bad); }
+  .ok .stamp { background: var(--ok-bg); color: var(--ok); } .bad .stamp { background: var(--bad-bg); color: var(--bad); } .warn .stamp { background: var(--warn-bg); color: var(--warn); }
   .gauge { flex: 1; min-width: 0; }
   .gauge .label { display: flex; justify-content: space-between; font-size: .9rem; color: var(--muted); }
   .gauge .label b { color: var(--ink); font-size: 1.1rem; }
   .meter { height: 16px; border-radius: 999px; background: #e5eaf3; position: relative; margin-top: 6px; }
   .meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; min-width: 5px; width: 0; transition: width .6s ease-out; }
-  .ok .meter i { background: var(--ok); } .bad .meter i { background: var(--bad); }
+  .ok .meter i { background: var(--ok); } .bad .meter i { background: var(--bad); } .warn .meter i { background: var(--warn); }
+  .reasons { margin: 14px 0 0; padding: 10px 14px 10px 30px; border-radius: 12px; background: #f4f6fb; font-size: .95rem; opacity: 0; transition: opacity .35s; }
+  .reasons.show { opacity: 1; }
+  .reasons li + li { margin-top: 4px; }
   .meter em { position: absolute; top: -5px; bottom: -5px; width: 3px; background: var(--ink); border-radius: 2px; }
   @media (prefers-reduced-motion: reduce) { .meter i, .result, .pipeline span { transition: none; } }
 
@@ -74,7 +77,7 @@
   td { padding: 10px; border-bottom: 1px solid #edf1f7; white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.num, th.num { text-align: right; }
   .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: .82rem; }
-  .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.bad { background: var(--bad-bg); color: var(--bad); } .pill.warn { background: var(--warn-bg); color: var(--warn); }
 </style>
 </head>
 <body>
@@ -101,6 +104,7 @@
       <div class="counters">
         <div><b id="total">0</b><span>recebidas</span></div>
         <div class="ok"><b id="approved">0</b><span>aprovadas</span></div>
+        <div class="warn"><b id="review">0</b><span>em revisão</span></div>
         <div class="bad"><b id="blocked">0</b><span>bloqueadas</span></div>
       </div>
     </section>
@@ -168,13 +172,21 @@
   } catch { /* se o QR falhar, o link acima continua valendo */ }
 
   // ---------- Transação em destaque: mostra o caminho dentro da API, depois o veredito ----------
-  const STAGES = ["Recebida", "Features calculadas", "Árvores somadas", "Decisão"];
+  const STAGES = ["Recebida", "Features calculadas", "Árvores somadas", "Território conhecido", "Decisão"];
+
+  // Aparência de cada decisão (a API devolve "aprovada", "revisao" ou "bloqueada").
+  const LOOK = {
+    aprovada:  { cls: "ok",   stamp: "APROVADA",   pill: "Aprovada" },
+    bloqueada: { cls: "bad",  stamp: "BLOQUEADA",  pill: "Bloqueada" },
+    revisao:   { cls: "warn", stamp: "EM REVISÃO", pill: "Em revisão" }
+  };
+  const lookOf = entry => LOOK[entry.decision] || (entry.isFraud ? LOOK.bloqueada : LOOK.aprovada);
   let spotToken = 0;
 
   async function spotlight(entry, animate) {
     const token = ++spotToken;                    // se chegar outra compra no meio, esta animação é abandonada
     const spot = $("spot");
-    const blocked = entry.isFraud;
+    const look = lookOf(entry);
 
     const head = el("div", "spot-head");
     const left = el("div");
@@ -194,7 +206,7 @@
     const pipeline = el("div", "pipeline");
     const stages = STAGES.map(name => { const s = el("span", "", name); pipeline.append(s); return s; });
 
-    const result = el("div", "result " + (blocked ? "bad" : "ok"));
+    const result = el("div", "result " + look.cls);
     const gauge = el("div", "gauge");
     const label = el("div", "label");
     label.append(el("span", "", "Probabilidade de fraude"), el("b", "", percent(entry.fraudProbability)));
@@ -204,9 +216,13 @@
     cut.title = `corte em ${Math.round(entry.threshold * 100)}%`;
     meter.append(fill, cut);
     gauge.append(label, meter);
-    result.append(el("div", "stamp", blocked ? "BLOQUEADA" : "APROVADA"), gauge);
+    result.append(el("div", "stamp", look.stamp), gauge);
+
+    const reasons = el("ul", "reasons");
+    for (const reason of entry.reasons || []) reasons.append(el("li", "", reason));
 
     spot.replaceChildren(head, facts, pipeline, result);
+    if (reasons.children.length) spot.append(reasons);
 
     for (let i = 0; i < stages.length; i++) {
       stages[i].className = "on";
@@ -215,6 +231,7 @@
       stages[i].className = "done";
     }
     result.classList.add("show");
+    reasons.classList.add("show");
     requestAnimationFrame(() => fill.style.width = Math.max(0, Math.min(100, entry.fraudProbability * 100)) + "%");
   }
 
@@ -230,7 +247,8 @@
       el("td", "num", km(entry.distanceKm)),
       el("td", "num", percent(entry.fraudProbability)));
     const decision = el("td");
-    decision.append(el("span", "pill " + (entry.isFraud ? "bad" : "ok"), entry.isFraud ? "Bloqueada" : "Aprovada"));
+    const look = lookOf(entry);
+    decision.append(el("span", "pill " + look.cls, look.pill));
     row.append(decision);
     $("rows").prepend(row);
     while ($("rows").children.length > 30) $("rows").lastChild.remove();
@@ -249,7 +267,8 @@
       $("dot").className = "dot live"; $("statusText").textContent = "ao vivo";
       $("total").textContent = data.total;
       $("blocked").textContent = data.blocked;
-      $("approved").textContent = data.total - data.blocked;
+      $("review").textContent = data.review || 0;
+      $("approved").textContent = data.total - data.blocked - (data.review || 0);
 
       if (data.lastId < lastId) {           // o painel foi limpo (ou a API reiniciou)
         lastId = 0; $("rows").replaceChildren(); spotToken++;

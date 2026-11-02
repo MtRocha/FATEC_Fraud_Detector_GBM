@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Monitor do serviço</title>
+<style>
+  :root {
+    --bg: #eef2f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6577; --line: #d9e0ec; --soft: #f4f6fb;
+    --primary: #1d4ed8; --ok: #15803d; --ok-bg: #dcfce7; --bad: #b91c1c; --bad-bg: #fee2e2;
+    --warn: #b45309; --warn-bg: #fef3c7; --err: #7c3aed; --err-bg: #ede9fe; --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px 8px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 1.4rem; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: .9rem; }
+  .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .9rem; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; }
+  .dot.live { background: var(--ok); } .dot.down { background: var(--bad); }
+  button, input, select { font: inherit; }
+  .btn { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .export { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px 4px 10px; }
+  .export label { font-size: .8rem; color: var(--muted); }
+  .export input { border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; }
+
+  main { padding: 8px 24px 28px; display: grid; gap: 18px; }
+  @media (max-width: 700px) { header, main { padding-left: 16px; padding-right: 16px; } }
+  .card { background: var(--card); border-radius: var(--radius); padding: 18px; box-shadow: 0 1px 3px rgba(15, 23, 42, .07); min-width: 0; }
+  .card h2 { margin: 0 0 12px; font-size: .85rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .kpi { background: var(--card); border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(15, 23, 42, .07); }
+  .kpi span { display: block; color: var(--muted); font-size: .8rem; }
+  .kpi b { font-size: 1.7rem; font-variant-numeric: tabular-nums; }
+  .kpi.ok b { color: var(--ok); } .kpi.warn b { color: var(--warn); } .kpi.bad b { color: var(--bad); } .kpi.err b { color: var(--err); }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 9px 10px; border-bottom: 1px solid #edf1f7; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.num, th.num { text-align: right; }
+  td.client { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  tr.entry { cursor: pointer; }
+  tr.entry:hover td { background: #f8faff; }
+  tr.entry.fresh td { animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background: #dbe7ff; } to { background: transparent; } }
+  @media (prefers-reduced-motion: reduce) { tr.entry.fresh td { animation: none; } }
+  tr.detail td { white-space: normal; background: var(--soft); }
+  .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  @media (max-width: 800px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-grid h3 { margin: 0 0 6px; font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  pre { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: .82rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .detail-grid ul { margin: 0; padding-left: 18px; }
+  .meta { color: var(--muted); font-size: .85rem; word-break: break-all; margin-top: 8px; }
+
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-weight: 700; font-size: .78rem; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); } .pill.err { background: var(--err-bg); color: var(--err); }
+  .pill.muted { background: #e5eaf3; color: var(--muted); }
+  .muted { color: var(--muted); }
+
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 12px; cursor: pointer; font-size: .85rem; color: var(--ink); }
+  .filters button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .empty { color: var(--muted); padding: 24px 10px; text-align: center; }
+
+  /* Tela de acesso */
+  .gate { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 5; }
+  .gate.show { display: flex; }
+  .gate form { background: var(--card); border-radius: 20px; padding: 26px; width: 100%; max-width: 380px; box-shadow: 0 10px 30px rgba(15, 23, 42, .1); }
+  .gate h1 { margin: 0 0 4px; font-size: 1.3rem; }
+  .gate p { margin: 0 0 16px; color: var(--muted); font-size: .92rem; }
+  .gate input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; margin-bottom: 12px; }
+  .gate .btn { width: 100%; padding: 11px; }
+  .gate .error { color: var(--bad); font-size: .9rem; min-height: 1.2em; margin: -4px 0 10px; }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <form id="gateForm">
+    <h1>Monitor do serviço</h1>
+    <p>Esta página mostra IPs e os dados enviados por quem usa a API. Informe a chave de acesso (Monitor:AccessKey no appsettings.json).</p>
+    <input id="keyInput" type="password" autocomplete="current-password" placeholder="Chave de acesso" required>
+    <div class="error" id="gateError" role="alert"></div>
+    <button class="btn primary" type="submit">Entrar</button>
+  </form>
+</div>
+
+<header>
+  <div>
+    <h1>Monitor do serviço</h1>
+    <p>Quem está usando a API, o que enviou e o que recebeu. <span id="todayLabel"></span></p>
+  </div>
+  <div class="tools">
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">conectando…</span></div>
+    <div class="export">
+      <label for="from">De</label><input id="from" type="date">
+      <label for="to">até</label><input id="to" type="date">
+      <button class="btn" id="download" type="button">Baixar relatório (CSV)</button>
+    </div>
+    <button class="btn" id="logout" type="button">Sair</button>
+  </div>
+</header>
+
+<main>
+  <section class="kpis" aria-label="Indicadores de hoje">
+    <div class="kpi"><span>Requisições hoje</span><b id="kRequests">0</b></div>
+    <div class="kpi"><span>Clientes ativos (1 h)</span><b id="kClients">0</b></div>
+    <div class="kpi"><span>Últimos 5 minutos</span><b id="k5min">0</b></div>
+    <div class="kpi ok"><span>Aprovadas</span><b id="kApproved">0</b></div>
+    <div class="kpi warn"><span>Em revisão</span><b id="kReview">0</b></div>
+    <div class="kpi bad"><span>Bloqueadas</span><b id="kBlocked">0</b></div>
+    <div class="kpi err"><span>Erros (4xx/5xx)</span><b id="kErrors">0</b></div>
+    <div class="kpi"><span>Tempo médio de resposta</span><b id="kLatency">0 ms</b></div>
+  </section>
+
+  <section class="card">
+    <h2>Clientes de hoje</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Cliente</th><th>Dispositivo</th><th>Origem</th><th class="num">Requisições</th><th class="num">Bloqueadas</th><th>Última atividade</th></tr></thead>
+        <tbody id="clients"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head-row">
+      <h2>Requisições ao vivo</h2>
+      <span class="muted" style="font-size:.85rem">Clique em uma linha para ver o que foi enviado e recebido.</span>
+    </div>
+    <div class="filters" id="filters">
+      <button type="button" data-filter="all" class="on">Todas</button>
+      <button type="button" data-filter="predict">Previsões</button>
+      <button type="button" data-filter="bloqueada">Bloqueadas</button>
+      <button type="button" data-filter="revisao">Em revisão</button>
+      <button type="button" data-filter="error">Erros</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Hora</th><th>Cliente</th><th>Origem</th><th>Rota</th><th class="num">Status</th>
+          <th>Decisão</th><th class="num">Prob. de fraude</th><th class="num">Tempo</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const KEY_STORE = "fraud-monitor-key";
+  const MAX_ROWS = 300;
+
+  // A chave fica só nesta aba (sessionStorage): fechar o navegador pede de novo.
+  function readKey() { try { return sessionStorage.getItem(KEY_STORE) || ""; } catch { return ""; } }
+  function saveKey(k) { try { k ? sessionStorage.setItem(KEY_STORE, k) : sessionStorage.removeItem(KEY_STORE); } catch {} }
+  let accessKey = readKey();
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+  const time = iso => new Date(iso).toLocaleTimeString("pt-BR");
+  const dateTime = iso => new Date(iso).toLocaleString("pt-BR");
+  function percent(p) {
+    if (p === null || p === undefined) return "—";
+    const v = p * 100;
+    if (v > 0 && v < 0.01) return "< 0,01%";
+    return v.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
+  }
+  const DECISION = {
+    aprovada: ["ok", "Aprovada"], revisao: ["warn", "Em revisão"], bloqueada: ["bad", "Bloqueada"]
+  };
+  function decisionPill(entry) {
+    if (entry.statusCode >= 400) return el("span", "pill err", entry.statusCode === 400 ? "Recusada" : "Erro");
+    const d = DECISION[entry.decision];
+    return d ? el("span", "pill " + d[0], d[1]) : el("span", "pill muted", "—");
+  }
+  const clientName = e => e.clientId || `${e.clientIp} · ${e.device}`;
+
+  // ---------- Requisições ----------
+  const entries = [];          // mais recentes primeiro
+  let lastId = 0;
+  let filter = "all";
+  const open = new Set();      // linhas expandidas
+
+  function matches(e) {
+    if (filter === "predict") return e.path === "/predict";
+    if (filter === "error") return e.statusCode >= 400;
+    if (filter === "bloqueada" || filter === "revisao") return e.decision === filter;
+    return true;
+  }
+
+  function detailRow(e) {
+    const tr = el("tr", "detail");
+    const td = el("td"); td.colSpan = 9;
+    const grid = el("div", "detail-grid");
+
+    const sent = el("div");
+    sent.append(el("h3", "", "Enviado"));
+    let body = e.requestBody;
+    try { if (body) body = JSON.stringify(JSON.parse(body), null, 2); } catch { /* corpo inválido: mostra como veio */ }
+    sent.append(el("pre", "", body || "(sem corpo)"));
+
+    const got = el("div");
+    got.append(el("h3", "", "Resultado"));
+    const list = el("ul");
+    if (e.decision) list.append(el("li", "", `Decisão: ${DECISION[e.decision]?.[1] || e.decision}, probabilidade ${percent(e.fraudProbability)}`));
+    for (const r of e.reasons || []) list.append(el("li", "", r));
+    for (const m of e.errors || []) list.append(el("li", "", "Erro de validação: " + m));
+    if (!list.children.length) list.append(el("li", "", `Status ${e.statusCode}`));
+    got.append(list);
+    got.append(el("div", "meta", `${dateTime(e.timestampUtc)} · ${e.method} ${e.path}${e.query || ""} · IP ${e.clientIp}`));
+    got.append(el("div", "meta", e.userAgent || "sem User-Agent"));
+
+    grid.append(sent, got);
+    td.append(grid);
+    tr.append(td);
+    return tr;
+  }
+
+  function renderRows(freshIds = new Set()) {
+    const tbody = $("rows");
+    tbody.replaceChildren();
+    const visible = entries.filter(matches);
+    if (!visible.length) {
+      const tr = el("tr"); const td = el("td", "empty", "Nenhuma requisição ainda."); td.colSpan = 9; tr.append(td); tbody.append(tr);
+      return;
+    }
+    for (const e of visible) {
+      const tr = el("tr", "entry" + (freshIds.has(e.id) ? " fresh" : ""));
+      tr.append(
+        el("td", "", e.id), el("td", "", time(e.timestampUtc)), el("td", "client", clientName(e)),
+        el("td", "", e.origin), el("td", "", `${e.method} ${e.path}`), el("td", "num", e.statusCode));
+      const dec = el("td"); dec.append(decisionPill(e)); tr.append(dec);
+      tr.append(el("td", "num", percent(e.fraudProbability)), el("td", "num", `${Math.round(e.durationMs)} ms`));
+      tr.title = clientName(e);
+      tr.addEventListener("click", () => { open.has(e.id) ? open.delete(e.id) : open.add(e.id); renderRows(); });
+      tbody.append(tr);
+      if (open.has(e.id)) tbody.append(detailRow(e));
+    }
+  }
+
+  document.querySelectorAll("[data-filter]").forEach(b => b.addEventListener("click", () => {
+    filter = b.dataset.filter;
+    document.querySelectorAll("[data-filter]").forEach(x => x.classList.toggle("on", x === b));
+    renderRows();
+  }));
+
+  // ---------- Indicadores e clientes ----------
+  function renderStats(s) {
+    $("todayLabel").textContent = `Indicadores de ${s.today}.`;
+    $("kRequests").textContent = s.requestsToday;
+    $("kClients").textContent = s.activeClientsLastHour;
+    $("k5min").textContent = s.requestsLast5Min;
+    $("kApproved").textContent = s.approvedToday;
+    $("kReview").textContent = s.reviewToday;
+    $("kBlocked").textContent = s.blockedToday;
+    $("kErrors").textContent = s.errorsToday;
+    $("kLatency").textContent = `${Math.round(s.avgDurationMs)} ms`;
+
+    const tbody = $("clients");
+    tbody.replaceChildren();
+    if (!s.clients.length) {
+      const tr = el("tr"); const td = el("td", "empty", "Ninguém usou o serviço hoje."); td.colSpan = 6; tr.append(td); tbody.append(tr);
+      return;
+    }
+    for (const c of s.clients) {
+      const tr = el("tr");
+      tr.append(el("td", "client", c.client), el("td", "", c.device), el("td", "", c.origin),
+        el("td", "num", c.requests), el("td", "num", c.blocked), el("td", "", time(c.lastSeenUtc)));
+      tr.title = c.client;
+      tbody.append(tr);
+    }
+  }
+
+  // ---------- Consulta periódica ----------
+  let timer = null;
+  async function poll() {
+    try {
+      const response = await fetch(`monitor/requests?after=${lastId}`, { headers: { "X-Monitor-Key": accessKey }, cache: "no-store" });
+      if (response.status === 401) { showGate("Chave incorreta."); return; }
+      if (response.status === 503) { showGate("O monitor está desligado: defina Monitor:AccessKey no appsettings.json."); return; }
+      if (!response.ok) throw new Error(response.status);
+      const data = await response.json();
+
+      $("dot").className = "dot live"; $("statusText").textContent = "ao vivo";
+      if (data.lastId < lastId) { entries.length = 0; lastId = 0; } // a API perdeu o histórico (ex.: arquivos apagados)
+
+      const fresh = new Set();
+      const firstLoad = lastId === 0;
+      for (const e of data.entries) {
+        if (e.id <= lastId) continue;
+        entries.unshift(e); lastId = e.id;
+        if (!firstLoad) fresh.add(e.id); // na primeira carga nada pisca
+      }
+      entries.splice(MAX_ROWS);
+      renderStats(data.stats);
+      if (data.entries.length || !$("rows").children.length) renderRows(fresh);
+    } catch {
+      $("dot").className = "dot down"; $("statusText").textContent = "sem conexão com a API";
+    }
+    timer = setTimeout(poll, 2000);
+  }
+
+  function showGate(message) {
+    clearTimeout(timer);
+    $("gateError").textContent = message || "";
+    $("gate").classList.add("show");
+    $("keyInput").focus();
+  }
+
+  $("gateForm").addEventListener("submit", event => {
+    event.preventDefault();
+    accessKey = $("keyInput").value.trim();
+    saveKey(accessKey);
+    $("gate").classList.remove("show");
+    entries.length = 0; lastId = 0;
+    poll();
+  });
+
+  $("logout").addEventListener("click", () => { saveKey(""); accessKey = ""; $("keyInput").value = ""; showGate(); });
+
+  // ---------- Relatório CSV ----------
+  const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  $("from").value = $("to").value = isoDay(new Date());
+
+  $("download").addEventListener("click", async () => {
+    const button = $("download");
+    button.disabled = true; button.textContent = "Gerando…";
+    try {
+      const response = await fetch(`monitor/report.csv?de=${$("from").value}&ate=${$("to").value}`, { headers: { "X-Monitor-Key": accessKey } });
+      if (response.status === 401) { showGate("Chave incorreta."); return; }
+      if (!response.ok) throw new Error(response.status);
+      const blob = await response.blob();
+      const link = el("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `relatorio-${$("from").value}-a-${$("to").value}.csv`;
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    } catch {
+      alert("Não foi possível gerar o relatório.");
+    } finally {
+      button.disabled = false; button.textContent = "Baixar relatório (CSV)";
+    }
+  });
+
+  if (accessKey) poll(); else showGate();
+</script>
+</body>
+</html>

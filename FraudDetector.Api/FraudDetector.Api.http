@@ -87,3 +87,21 @@ Content-Type: application/json
   "merchantLat": 35.676200,
   "merchantLong": 139.650300
 }
+
+### 7) Fora do território conhecido: compra presencial em Tóquio, de tarde, para titular de São Paulo.
+###    O modelo dá probabilidade baixa, mas a distância nunca apareceu no treino: deve vir "revisao".
+POST {{host}}/predict
+Content-Type: application/json
+
+{
+  "transactionTime": "2026-10-03T15:30:00",
+  "category": "shopping_pos",
+  "amount": 350.00,
+  "currency": "BRL",
+  "gender": "F",
+  "customerLat": -23.550520,
+  "customerLong": -46.633308,
+  "dateOfBirth": "1992-08-14",
+  "merchantLat": 35.676200,
+  "merchantLong": 139.650300
+}

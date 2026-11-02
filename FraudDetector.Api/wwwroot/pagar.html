@@ -8,7 +8,7 @@
   :root {
     --bg: #eef2f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6577; --line: #d9e0ec;
     --primary: #1d4ed8; --primary-ink: #ffffff; --ok: #15803d; --ok-bg: #dcfce7;
-    --bad: #b91c1c; --bad-bg: #fee2e2; --radius: 16px;
+    --bad: #b91c1c; --bad-bg: #fee2e2; --warn: #b45309; --warn-bg: #fef3c7; --radius: 16px;
   }
   * { box-sizing: border-box; }
   body {
@@ -111,11 +111,15 @@
   .ok .badge { background: var(--ok-bg); color: var(--ok); }
   .bad .badge { background: var(--bad-bg); color: var(--bad); }
   .verdict h2 { margin: 0 0 4px; font-size: 1.5rem; }
-  .ok h2 { color: var(--ok); } .bad h2 { color: var(--bad); }
+  .warn .badge { background: var(--warn-bg); color: var(--warn); }
+  .ok h2 { color: var(--ok); } .bad h2 { color: var(--bad); } .warn h2 { color: var(--warn); }
+  .reasons { text-align: left; margin: 0 0 14px; padding: 10px 12px 10px 28px; border-radius: 12px; background: #f4f6fb; font-size: .9rem; }
+  .reasons:empty { display: none; }
+  .reasons li + li { margin-top: 4px; }
   .verdict p { margin: 0 0 14px; color: var(--muted); }
   .meter { height: 12px; border-radius: 999px; background: #e5eaf3; position: relative; margin: 6px 0 4px; }
   .meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; min-width: 4px; }
-  .ok .meter i { background: var(--ok); } .bad .meter i { background: var(--bad); }
+  .ok .meter i { background: var(--ok); } .bad .meter i { background: var(--bad); } .warn .meter i { background: var(--warn); }
   .meter b { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--ink); }
   .scale { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); }
   dl { display: grid; grid-template-columns: auto auto; gap: 6px 12px; text-align: left; margin: 16px 0; font-size: .92rem; }
@@ -143,6 +147,7 @@
     <button type="button" data-preset="comum">Compra comum</button>
     <button type="button" data-preset="madrugada">Madrugada, valor alto</button>
     <button type="button" data-preset="online">Online à noite</button>
+    <button type="button" data-preset="longe">Loja em Tóquio</button>
   </div>
 
   <div class="errors" id="errors" role="alert"></div>
@@ -236,6 +241,7 @@
       <div class="badge" id="badge"></div>
       <h2 id="verdictTitle"></h2>
       <p id="verdictText"></p>
+      <ul class="reasons" id="reasons"></ul>
       <div class="meter"><i id="meterFill"></i><b id="meterCut"></b></div>
       <div class="scale"><span>0%</span><span id="cutLabel"></span><span>100%</span></div>
       <dl id="details"></dl>
@@ -292,7 +298,8 @@
   const PRESETS = {
     comum:     { amount: "89.90",   currency: "BRL", category: "food_dining",  when: () => atHour(12, 40), merchantCity: "same" },
     madrugada: { amount: "5200.00", currency: "BRL", category: "shopping_pos", when: () => atHour(2, 15),  merchantCity: "same" },
-    online:    { amount: "4800.00", currency: "BRL", category: "shopping_net", when: () => atHour(23, 10), merchantCity: "Rio de Janeiro" }
+    online:    { amount: "4800.00", currency: "BRL", category: "shopping_net", when: () => atHour(23, 10), merchantCity: "Rio de Janeiro" },
+    longe:     { amount: "350.00",  currency: "BRL", category: "shopping_pos", when: () => atHour(15, 30), merchantCity: "Tóquio" }
   };
   document.querySelectorAll("[data-preset]").forEach(button => button.addEventListener("click", () => {
     const preset = PRESETS[button.dataset.preset];
@@ -360,12 +367,26 @@
   }
 
   function showVerdict(result, payload) {
-    const blocked = result.isFraud;
+    // Três decisões possíveis: aprovada, bloqueada (modelo acima do corte) ou revisão
+    // (a compra tem algo que o modelo nunca viu no treino, então ele não decide sozinho).
+    const decision = result.decision || (result.isFraud ? "bloqueada" : "aprovada");
+    const look = {
+      aprovada:  { cls: "ok",   badge: "✓", title: "Compra aprovada" },
+      bloqueada: { cls: "bad",  badge: "✕", title: "Compra bloqueada" },
+      revisao:   { cls: "warn", badge: "!", title: "Compra em revisão" }
+    }[decision];
     const verdict = $("verdict");
-    verdict.className = "verdict show " + (blocked ? "bad" : "ok");
-    $("badge").textContent = blocked ? "✕" : "✓";
-    $("verdictTitle").textContent = blocked ? "Compra bloqueada" : "Compra aprovada";
-    $("verdictText").textContent = `Probabilidade de fraude: ${percent(result.fraudProbability)}`;
+    verdict.className = "verdict show " + look.cls;
+    $("badge").textContent = look.badge;
+    $("verdictTitle").textContent = look.title;
+    $("verdictText").textContent = decision === "revisao"
+      ? `O banco pediria uma confirmação ao titular. Probabilidade calculada: ${percent(result.fraudProbability)}`
+      : `Probabilidade de fraude: ${percent(result.fraudProbability)}`;
+    const reasons = $("reasons");
+    reasons.replaceChildren();
+    for (const reason of result.reasons || []) {
+      const li = document.createElement("li"); li.textContent = reason; reasons.append(li);
+    }
     $("meterFill").style.width = Math.max(0, Math.min(100, result.fraudProbability * 100)) + "%";
     $("meterCut").style.left = result.threshold * 100 + "%";
     $("cutLabel").textContent = `corte em ${Math.round(result.threshold * 100)}%`;

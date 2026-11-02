@@ -14,10 +14,12 @@ public record FeedEntry(
     string Gender,
     double FraudProbability,
     bool IsFraud,
-    double Threshold);
+    double Threshold,
+    string Decision,                // "aprovada", "revisao" ou "bloqueada"
+    IReadOnlyList<string> Reasons); // por que o sistema decidiu assim
 
 /// <summary>O que o painel recebe a cada consulta.</summary>
-public record FeedSnapshot(IReadOnlyList<FeedEntry> Entries, long Total, long Blocked, long LastId);
+public record FeedSnapshot(IReadOnlyList<FeedEntry> Entries, long Total, long Blocked, long Review, long LastId);
 
 /// <summary>
 /// Guarda na memória as últimas compras avaliadas, para o painel mostrar.
@@ -36,6 +38,7 @@ public class TransactionFeed
     private long _lastId;
     private long _total;
     private long _blocked;
+    private long _review;
 
     /// <summary>Registra uma compra e devolve a versão com o número (Id) atribuído.</summary>
     public FeedEntry Add(FeedEntry entry)
@@ -48,8 +51,10 @@ public class TransactionFeed
                 _entries.RemoveAt(0);
 
             _total++;
-            if (numbered.IsFraud)
+            if (numbered.Decision == "bloqueada")
                 _blocked++;
+            else if (numbered.Decision == "revisao")
+                _review++;
 
             return numbered;
         }
@@ -61,7 +66,7 @@ public class TransactionFeed
         lock (_lock)
         {
             List<FeedEntry> news = _entries.Where(e => e.Id > afterId).ToList();
-            return new FeedSnapshot(news, _total, _blocked, _lastId);
+            return new FeedSnapshot(news, _total, _blocked, _review, _lastId);
         }
     }
 
@@ -73,6 +78,7 @@ public class TransactionFeed
             _lastId = 0;
             _total = 0;
             _blocked = 0;
+            _review = 0;
         }
     }
 }

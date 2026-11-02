@@ -32,6 +32,10 @@ public static class TrainCommand
         int trainCount = (int)(x.Length * (1 - ValidationFraction));
         double[][] trainX = x[..trainCount];
         double[] trainY = y[..trainCount];
+
+        // Território conhecido: o menor e o maior valor de cada feature no treino.
+        // Vai junto com o modelo para a API recusar decisões automáticas fora dele.
+        List<FeatureRange> ranges = FraudModel.ComputeRanges(x[..trainCount]);
         double[][] validX = x[trainCount..];
         double[] validY = y[trainCount..];
 
@@ -128,7 +132,26 @@ public static class TrainCommand
         // 5) Salvar e conferir
         // --------------------------------------------------------------
         string path = DataFiles.ModelPath();
-        FraudModel.FromTrained(classifier, threshold).Save(path);
+        FraudModel finalModel = FraudModel.FromTrained(classifier, threshold, ranges);
+
+        // Quantas transações do teste cairiam fora do território conhecido (iriam para revisão)?
+        Console.WriteLine();
+        Console.WriteLine("Território conhecido (valores vistos no treino):");
+        foreach (string name in new[] { "amount", "age", "distance_km" })
+        {
+            int i = FeatureExtractor.FeatureNames.ToList().IndexOf(name);
+            Console.WriteLine($"  {name,-12} de {ranges[i].Min:N2} a {ranges[i].Max:N2}");
+        }
+        int outside = 0, outsideFrauds = 0;
+        for (int i = 0; i < testX.Length; i++)
+        {
+            if (finalModel.OutsideKnownTerritory(testX[i]).Count == 0) continue;
+            outside++;
+            if (testY[i] == 1) outsideFrauds++;
+        }
+        Console.WriteLine($"No teste, {outside:N0} transações ficariam fora do território conhecido ({outsideFrauds:N0} fraudes).");
+
+        finalModel.Save(path);
 
         // Recarrega o arquivo e confere se ele reproduz as mesmas previsões.
         FraudModel loaded = FraudModel.Load(path);
