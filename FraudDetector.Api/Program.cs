@@ -23,13 +23,27 @@ string[] modelCandidates =
     Path.Combine(AppContext.BaseDirectory, "Models", "fraud.model.json"),
 ];
 
-string modelPath = modelCandidates.FirstOrDefault(File.Exists)
-    ?? throw new FileNotFoundException(
-        $"Modelo não encontrado. Procurei em: {string.Join(" e ", modelCandidates)}. " +
-        "Rode a opção 6 do console (treinar o modelo final) primeiro.");
+// Se o modelo não carregar, a API NÃO derruba o processo: ela sobe e responde a qualquer
+// rota com o motivo do problema. Num servidor (Azure, IIS), um erro na inicialização vira
+// só "HTTP Error 500.30", sem dizer o que aconteceu; assim, o motivo aparece na tela.
+FraudModel? model = null;
+string? modelError = null;
+try
+{
+    string modelPath = modelCandidates.FirstOrDefault(File.Exists)
+        ?? throw new FileNotFoundException(
+            $"Modelo não encontrado. Procurei em: {string.Join(" e ", modelCandidates)}. " +
+            "Rode a opção 6 do console (treinar o modelo final) e confira se o arquivo foi junto na publicação.");
+    model = FraudModel.Load(modelPath);
+}
+catch (Exception ex)
+{
+    modelError = $"{ex.GetType().Name}: {ex.Message}";
+}
 
-FraudModel model = FraudModel.Load(modelPath);
-builder.Services.AddSingleton(model);
+// O registro existe mesmo sem modelo (os endpoints precisam dele para serem montados),
+// mas nunca é usado nesse caso: o bloqueio logo abaixo responde antes.
+builder.Services.AddSingleton<FraudModel>(_ => model ?? throw new InvalidOperationException(modelError));
 
 // Conversão de moeda: o modelo aprendeu com valores em dólar, então a API busca a cotação do dia.
 // O serviço é singleton para que o cache de cotações seja compartilhado entre as requisições.
@@ -51,6 +65,25 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+if (modelError is not null)
+{
+    app.Logger.LogCritical("A API subiu SEM modelo: {Error}", modelError);
+
+    // Toda requisição recebe 503 com a explicação, em vez de a aplicação cair.
+    app.Use(async (HttpContext context, RequestDelegate _) =>
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = "modelo indisponível",
+            error = modelError,
+            searchedPaths = modelCandidates,
+            contentRoot = app.Environment.ContentRootPath,
+            baseDirectory = AppContext.BaseDirectory,
+        });
+    });
+}
 
 // ----------------------------------------------------------------------
 // Registro de uso: mede e grava cada chamada às rotas do serviço.

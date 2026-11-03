@@ -72,11 +72,22 @@ public class RequestLog
         _logger = logger;
         _directory = Path.GetFullPath(Path.Combine(
             environment.ContentRootPath, configuration["Monitor:LogDirectory"] ?? "logs"));
-        Directory.CreateDirectory(_directory);
+        try
+        {
+            Directory.CreateDirectory(_directory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Em alguns servidores a pasta do site é somente leitura (ex.: Azure com "run from package").
+            // Nesse caso, gravamos na pasta temporária do sistema, que sempre aceita escrita.
+            _directory = Path.Combine(Path.GetTempPath(), "fraud-detector-logs");
+            Directory.CreateDirectory(_directory);
+            logger.LogWarning(ex, "Sem permissão para gravar em logs/; usando {Directory}.", _directory);
+        }
 
         // Os dias do relatório seguem o fuso de quem monitora, não o do servidor (que costuma estar em UTC).
         try { _timeZone = TimeZoneInfo.FindSystemTimeZoneById(configuration["Monitor:TimeZone"] ?? "America/Sao_Paulo"); }
-        catch (TimeZoneNotFoundException) { _timeZone = TimeZoneInfo.Local; }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException) { _timeZone = TimeZoneInfo.Local; }
 
         ReloadRecentFiles();
     }
@@ -101,7 +112,7 @@ public class RequestLog
                 DateOnly day = DateOnly.FromDateTime(ToLocal(numbered.TimestampUtc));
                 File.AppendAllText(FileFor(day), JsonSerializer.Serialize(numbered, Json) + "\n", Encoding.UTF8);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 // Sem disco disponível, o monitor continua funcionando só com a memória.
                 _logger.LogWarning(ex, "Não foi possível gravar o registro da requisição {Id}.", numbered.Id);

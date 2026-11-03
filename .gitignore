@@ -12,8 +12,11 @@ obj/
 # Bases de dados (grandes demais para o Git; baixar do Kaggle)
 FraudDetector/DataSet/*.csv
 
-# Modelos treinados gerados pela aplicação
+# Modelos treinados gerados pela aplicação.
+# O modelo final (Models/fraud.model.json) NÃO é ignorado: a publicação na nuvem
+# compila a partir do repositório e precisa dele para a API funcionar.
 *.model.json
+!Models/fraud.model.json
 
 # Registro de uso da API (contém IPs e dados enviados pelos usuários)
 FraudDetector.Api/logs/
