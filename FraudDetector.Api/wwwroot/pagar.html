@@ -4,26 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pagar por aproximação</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #eef2f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6577; --line: #d9e0ec;
-    --primary: #1d4ed8; --primary-ink: #ffffff; --ok: #15803d; --ok-bg: #dcfce7;
-    --bad: #b91c1c; --bad-bg: #fee2e2; --warn: #b45309; --warn-bg: #fef3c7; --radius: 16px;
+    color-scheme: dark;
+    --bg: #05070d; --card: rgba(12, 18, 32, .78); --surface: #0d1424; --soft: rgba(255, 255, 255, .035);
+    --track: #1a2336; --ink: #e6edfb; --muted: #8b97b1; --line: rgba(130, 160, 230, .16);
+    --primary: #4f8cff; --primary-2: #9cc4ff; --primary-ink: #ffffff;
+    --ok: #4ade80; --ok-bg: rgba(74, 222, 128, .13); --bad: #f87171; --bad-bg: rgba(248, 113, 113, .14);
+    --warn: #fbbf24; --warn-bg: rgba(251, 191, 36, .14); --err: #a78bfa; --err-bg: rgba(167, 139, 250, .15);
+    --display: "Inter Tight", "Inter", system-ui, sans-serif;
+    --radius: 16px;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; color: var(--ink);
+    background:
+      radial-gradient(1100px 600px at 85% -10%, rgba(79, 140, 255, .16), transparent 60%),
+      radial-gradient(900px 520px at -10% 110%, rgba(56, 189, 248, .09), transparent 60%),
+      var(--bg);
+    background-attachment: fixed;
+    font: 16px/1.45 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   main { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
-  h1 { font-size: 1.35rem; margin: 4px 0 2px; }
+  h1 { font-family: var(--display); font-weight: 400; font-size: 1.6rem; letter-spacing: -.02em; margin: 4px 0 2px; }
   .sub { color: var(--muted); margin: 0 0 16px; font-size: .95rem; }
 
   /* Cartão ilustrativo */
   .plastic {
     border-radius: var(--radius); padding: 18px 20px; color: #fff; margin-bottom: 16px;
-    background: linear-gradient(135deg, #1e3a8a, #2563eb 55%, #38bdf8);
-    box-shadow: 0 10px 24px rgba(30, 58, 138, .28);
+    background: linear-gradient(135deg, #0b1f4d, #1d4ed8 55%, #38bdf8);
+    box-shadow: 0 14px 40px rgba(79, 140, 255, .35); border: 1px solid rgba(156, 196, 255, .25);
   }
   .plastic .row { display: flex; justify-content: space-between; align-items: center; }
   .plastic .brand { font-weight: 700; letter-spacing: .04em; }
@@ -33,21 +46,22 @@
 
   .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
   .presets button {
-    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
     border-radius: 999px; padding: 8px 14px; font: inherit; font-size: .9rem; cursor: pointer;
   }
-  .presets button:active { background: #e2e8f5; }
+  .presets button:hover { border-color: var(--primary); }
+  .presets button:active { background: var(--track); }
 
   fieldset {
-    border: 0; background: var(--card); border-radius: var(--radius);
-    padding: 16px; margin: 0 0 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+    border: 1px solid var(--line); background: var(--card); border-radius: var(--radius); backdrop-filter: blur(10px);
+    padding: 16px; margin: 0 0 14px; box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
   }
   legend { float: left; width: 100%; font-weight: 700; margin-bottom: 10px; padding: 0; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; clear: both; }
   .full { grid-column: 1 / -1; }
   label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 4px; }
   input, select {
-    width: 100%; font: inherit; color: var(--ink); background: #fff;
+    width: 100%; font: inherit; color: var(--ink); background: var(--surface);
     border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; min-height: 46px;
   }
   input:focus, select:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
@@ -69,12 +83,13 @@
 
   /* Tela de aproximação e resultado */
   .overlay {
-    position: fixed; inset: 0; background: rgba(15, 23, 42, .72); display: none;
+    position: fixed; inset: 0; background: rgba(2, 4, 10, .8); backdrop-filter: blur(6px); display: none;
     align-items: center; justify-content: center; padding: 16px; z-index: 10;
   }
   .overlay.show { display: flex; }
   .sheet {
-    background: var(--card); border-radius: 22px; padding: 26px 22px; width: 100%; max-width: 420px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 26px 22px; width: 100%; max-width: 420px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 60px rgba(79, 140, 255, .12);
     text-align: center; max-height: 100%; overflow: auto;
   }
   .nfc { position: relative; width: 150px; height: 150px; margin: 4px auto 18px; }
@@ -110,14 +125,14 @@
   }
   .ok .badge { background: var(--ok-bg); color: var(--ok); }
   .bad .badge { background: var(--bad-bg); color: var(--bad); }
-  .verdict h2 { margin: 0 0 4px; font-size: 1.5rem; }
+  .verdict h2 { margin: 0 0 4px; font-family: var(--display); font-weight: 400; font-size: 1.7rem; letter-spacing: -.02em; }
   .warn .badge { background: var(--warn-bg); color: var(--warn); }
   .ok h2 { color: var(--ok); } .bad h2 { color: var(--bad); } .warn h2 { color: var(--warn); }
-  .reasons { text-align: left; margin: 0 0 14px; padding: 10px 12px 10px 28px; border-radius: 12px; background: #f4f6fb; font-size: .9rem; }
+  .reasons { text-align: left; margin: 0 0 14px; padding: 10px 12px 10px 28px; border-radius: 12px; background: var(--soft); border: 1px solid var(--line); font-size: .9rem; }
   .reasons:empty { display: none; }
   .reasons li + li { margin-top: 4px; }
   .verdict p { margin: 0 0 14px; color: var(--muted); }
-  .meter { height: 12px; border-radius: 999px; background: #e5eaf3; position: relative; margin: 6px 0 4px; }
+  .meter { height: 12px; border-radius: 999px; background: var(--track); position: relative; margin: 6px 0 4px; }
   .meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; min-width: 4px; }
   .ok .meter i { background: var(--ok); } .bad .meter i { background: var(--bad); } .warn .meter i { background: var(--warn); }
   .meter b { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--ink); }
@@ -125,8 +140,8 @@
   dl { display: grid; grid-template-columns: auto auto; gap: 6px 12px; text-align: left; margin: 16px 0; font-size: .92rem; }
   dt { color: var(--muted); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
   a.again { display: block; text-align: center; text-decoration: none; margin-bottom: 10px; box-sizing: border-box; }
-  a.again.explain { background: var(--ink); color: #fff; border-color: var(--ink); }
-  .again { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 12px; padding: 12px 18px; font: inherit; font-weight: 600; cursor: pointer; width: 100%; }
+  a.again.explain { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: 0 0 24px rgba(79, 140, 255, .35); }
+  .again { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 12px; padding: 12px 18px; font: inherit; font-weight: 600; cursor: pointer; width: 100%; }
 </style>
 </head>
 <body>
