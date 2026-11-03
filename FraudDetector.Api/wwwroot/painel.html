@@ -76,6 +76,10 @@
   th { text-align: left; color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   td { padding: 10px; border-bottom: 1px solid #edf1f7; white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.num, th.num { text-align: right; }
+  .explain-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 10px 16px; border-radius: 999px; background: var(--ink); color: #fff; text-decoration: none; font-weight: 600; font-size: .95rem; }
+  .explain-link:hover { background: var(--primary); }
+  tbody#rows tr { cursor: pointer; }
+  tbody#rows tr:hover td { background: #f4f7ff; }
   .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: .82rem; }
   .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.bad { background: var(--bad-bg); color: var(--bad); } .pill.warn { background: var(--warn-bg); color: var(--warn); }
 </style>
@@ -221,8 +225,13 @@
     const reasons = el("ul", "reasons");
     for (const reason of entry.reasons || []) reasons.append(el("li", "", reason));
 
+    // Link para a apresentação que mostra, passo a passo, como o modelo decidiu.
+    const explain = el("a", "explain-link", "Ver como o modelo decidiu →");
+    explain.href = `explicar.html?id=${entry.id}`;
+
     spot.replaceChildren(head, facts, pipeline, result);
     if (reasons.children.length) spot.append(reasons);
+    spot.append(explain);
 
     for (let i = 0; i < stages.length; i++) {
       stages[i].className = "on";
@@ -250,6 +259,8 @@
     const look = lookOf(entry);
     decision.append(el("span", "pill " + look.cls, look.pill));
     row.append(decision);
+    row.title = "Clique para ver como o modelo decidiu";
+    row.addEventListener("click", () => location.href = `explicar.html?id=${entry.id}`);
     $("rows").prepend(row);
     while ($("rows").children.length > 30) $("rows").lastChild.remove();
   }

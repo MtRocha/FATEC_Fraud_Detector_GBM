@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using FraudDetector.Core.Data;
+
 namespace FraudDetector.Api;
 
 /// <summary>Uma compra já avaliada, do jeito que o painel a exibe.</summary>
@@ -16,7 +19,10 @@ public record FeedEntry(
     bool IsFraud,
     double Threshold,
     string Decision,                // "aprovada", "revisao" ou "bloqueada"
-    IReadOnlyList<string> Reasons); // por que o sistema decidiu assim
+    IReadOnlyList<string> Reasons,  // por que o sistema decidiu assim
+    // A transação completa, guardada para a página de explicação. [JsonIgnore]: não vai para o
+    // painel público, porque contém data de nascimento e coordenadas exatas.
+    [property: JsonIgnore] Transaction? Source = null);
 
 /// <summary>O que o painel recebe a cada consulta.</summary>
 public record FeedSnapshot(IReadOnlyList<FeedEntry> Entries, long Total, long Blocked, long Review, long LastId);
@@ -68,6 +74,13 @@ public class TransactionFeed
             List<FeedEntry> news = _entries.Where(e => e.Id > afterId).ToList();
             return new FeedSnapshot(news, _total, _blocked, _review, _lastId);
         }
+    }
+
+    /// <summary>Uma compra pelo número (só as que ainda estão na memória).</summary>
+    public FeedEntry? Find(long id)
+    {
+        lock (_lock)
+            return _entries.FirstOrDefault(e => e.Id == id);
     }
 
     public void Clear()

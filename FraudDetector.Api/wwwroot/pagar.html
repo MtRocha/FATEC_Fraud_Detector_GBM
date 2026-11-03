@@ -124,6 +124,8 @@
   .scale { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); }
   dl { display: grid; grid-template-columns: auto auto; gap: 6px 12px; text-align: left; margin: 16px 0; font-size: .92rem; }
   dt { color: var(--muted); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  a.again { display: block; text-align: center; text-decoration: none; margin-bottom: 10px; box-sizing: border-box; }
+  a.again.explain { background: var(--ink); color: #fff; border-color: var(--ink); }
   .again { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 12px; padding: 12px 18px; font: inherit; font-weight: 600; cursor: pointer; width: 100%; }
 </style>
 </head>
@@ -245,6 +247,7 @@
       <div class="meter"><i id="meterFill"></i><b id="meterCut"></b></div>
       <div class="scale"><span>0%</span><span id="cutLabel"></span><span>100%</span></div>
       <dl id="details"></dl>
+      <a class="again explain" id="explainLink" href="#" hidden>Ver como o modelo decidiu →</a>
       <button class="again" id="again" type="button">Nova compra</button>
     </div>
   </div>
@@ -382,6 +385,11 @@
     $("verdictText").textContent = decision === "revisao"
       ? `O banco pediria uma confirmação ao titular. Probabilidade calculada: ${percent(result.fraudProbability)}`
       : `Probabilidade de fraude: ${percent(result.fraudProbability)}`;
+    // A API devolve o número da compra no painel; com ele abrimos a apresentação passo a passo.
+    const explainLink = $("explainLink");
+    explainLink.hidden = !result.feedId;
+    if (result.feedId) explainLink.href = `explicar.html?id=${result.feedId}`;
+
     const reasons = $("reasons");
     reasons.replaceChildren();
     for (const reason of result.reasons || []) {

@@ -174,6 +174,20 @@ app.MapGet("/feed", (TransactionFeed feed, long? after) => feed.Since(after ?? 0
     .WithName("Feed")
     .WithSummary("Compras avaliadas recentemente (usado pelo painel ao vivo).");
 
+// GET /feed/12/explain — refaz a previsão da compra nº 12 guardando cada passo,
+// para a página explicar.html contar como o modelo decidiu.
+app.MapGet("/feed/{id:long}/explain", (long id, TransactionFeed feed, FraudModel m) =>
+{
+    FeedEntry? entry = feed.Find(id);
+    if (entry?.Source is null)
+        return Results.NotFound(new { error = "Compra não encontrada. O painel guarda só as 200 mais recentes, e só na memória." });
+
+    double[] features = FeatureExtractor.Extract(entry.Source);
+    return Results.Ok(new { purchase = entry, explanation = m.Explain(features, entry.Threshold) });
+})
+.WithName("Explain")
+.WithSummary("Explica, passo a passo, como o modelo avaliou uma compra do painel.");
+
 // DELETE /feed — zera o painel.
 app.MapDelete("/feed", (TransactionFeed feed) =>
 {
@@ -230,7 +244,7 @@ app.MapPost("/predict", async (
     double probability = assessment.Probability;
 
     // Registra a compra para o painel, com os números que ajudam a explicar a decisão.
-    feed.Add(new FeedEntry(
+    FeedEntry logged = feed.Add(new FeedEntry(
         Id: 0, // o feed atribui o número
         ReceivedAtUtc: DateTime.UtcNow,
         Category: transaction.Category,
@@ -246,7 +260,8 @@ app.MapPost("/predict", async (
         IsFraud: assessment.Decision == FraudDecision.Block,
         Threshold: cut,
         Decision: assessment.DecisionCode,
-        Reasons: assessment.Reasons));
+        Reasons: assessment.Reasons,
+        Source: transaction));
 
     return Results.Ok(new PredictionResponse(
         FraudProbability: Math.Round(probability, 6),
@@ -257,7 +272,8 @@ app.MapPost("/predict", async (
         AmountInModelCurrency: Math.Round(transaction.Amount, 2),
         ModelCurrency: rates.ModelCurrency,
         ExchangeRate: rate.Rate,
-        ExchangeRateSource: rate.Source));
+        ExchangeRateSource: rate.Source,
+        FeedId: logged.Id));
 })
 .WithName("Predict")
 .WithSummary("Calcula a probabilidade de fraude de uma transação.")
@@ -343,4 +359,5 @@ public record PredictionResponse(
     double AmountInModelCurrency, // o valor que o modelo realmente avaliou, depois da conversão
     string ModelCurrency,
     double ExchangeRate,          // quanto valia 1 unidade da moeda enviada, na moeda do modelo
-    string ExchangeRateSource);   // "api", "cache", "sem conversão" ou um aviso de fallback
+    string ExchangeRateSource,    // "api", "cache", "sem conversão" ou um aviso de fallback
+    long FeedId);                 // número da compra no painel (usado para abrir a explicação)

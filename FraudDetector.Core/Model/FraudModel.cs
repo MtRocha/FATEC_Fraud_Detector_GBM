@@ -136,6 +136,67 @@ public class FraudModel
     /// Só olhamos as features contínuas; hora, dia da semana, gênero e categoria têm
     /// valores fixos que sempre aparecem no treino.
     /// </summary>
+    /// <summary>
+    /// Refaz a previsão guardando cada passo, para a página de explicação.
+    /// O resultado é o mesmo de Assess; só que, em vez de apenas somar as árvores,
+    /// anotamos o caminho e a contribuição de cada uma.
+    /// </summary>
+    public ModelExplanation Explain(double[] features, double? threshold = null)
+    {
+        double cut = threshold ?? Threshold;
+        FraudAssessment assessment = Assess(features, cut);
+
+        var contributions = new double[Trees.Count];
+        var traces = new List<TreeTrace>(Trees.Count);
+        for (int t = 0; t < Trees.Count; t++)
+        {
+            var path = new List<PathStep>();
+            TreeNode node = Trees[t];
+            while (!node.IsLeaf)
+            {
+                double value = features[node.FeatureIndex];
+                bool left = value <= node.Threshold;
+                path.Add(new PathStep(FeatureNames[node.FeatureIndex], node.Threshold, value, left));
+                node = left ? node.Left! : node.Right!;
+            }
+            contributions[t] = LearningRate * node.Value;
+            traces.Add(new TreeTrace(t + 1, path, node.Value, contributions[t]));
+        }
+
+        var checks = new List<TerritoryCheck>();
+        if (FeatureRanges is { } ranges)
+        {
+            bool online = IsOnline(features);
+            foreach ((string name, bool applies) in new[] { ("amount", true), ("age", true), ("distance_km", !online) })
+            {
+                int i = FeatureNames.IndexOf(name);
+                if (i < 0 || i >= ranges.Count) continue;
+                checks.Add(new TerritoryCheck(name, features[i], ranges[i].Min, ranges[i].Max, ranges[i].Contains(features[i]), applies));
+            }
+        }
+
+        return new ModelExplanation(
+            FeatureNames: FeatureNames,
+            Features: features,
+            InitialScore: InitialScore,
+            LearningRate: LearningRate,
+            Contributions: contributions,
+            FinalScore: InitialScore + contributions.Sum(),
+            Probability: assessment.Probability,
+            Threshold: cut,
+            ThresholdScore: Math.Log(cut / (1 - cut)), // inverso da sigmoide
+            FirstTree: Trees[0],
+            FirstTreeTrace: traces[0],
+            TopTrees: traces.OrderByDescending(x => Math.Abs(x.Contribution)).Take(5).ToList(),
+            Territory: checks,
+            Assessment: assessment);
+    }
+
+    /// <summary>Compra online = alguma coluna de categoria terminada em "_net" ligada.</summary>
+    private bool IsOnline(double[] features) => FeatureNames
+        .Select((name, i) => (name, i))
+        .Any(x => x.name.StartsWith("cat_") && x.name.EndsWith("_net") && features[x.i] == 1);
+
     public List<string> OutsideKnownTerritory(double[] features)
     {
         var reasons = new List<string>();
